@@ -8,7 +8,7 @@ let gameInterval = null;
 
 const players = {};
 const projectiles = [];
-const GAME_LOOP_INTERVAL = 1000 / 60; // 60 FPS
+const GAME_LOOP_INTERVAL = 1000 / 60;
 
 class Projectile {
   constructor(startposx, startposy, dirx, diry, owner) {
@@ -25,43 +25,39 @@ function startGameLoop() {
   if (gameInterval) clearInterval(gameInterval);
 
   gameInterval = setInterval(() => {
-    // Update all projectiles
     for (let i = projectiles.length - 1; i >= 0; i--) {
       const proj = projectiles[i];
       proj.posx += proj.dirx * proj.speed;
       proj.posy += proj.diry * proj.speed;
 
-      // Remove projectiles that are out of bounds
       if (proj.posx < 0 || proj.posx > 800 || proj.posy < 0 || proj.posy > 600) {
         projectiles.splice(i, 1);
       }
     }
 
-    // Check for collisions
+    // Kollisioner
     for (const playerId in players) {
       const player = players[playerId];
-      if (player.dead) continue; // Skip dead players
+      if (player.dead) continue;
       for (let i = projectiles.length - 1; i >= 0; i--) {
         const proj = projectiles[i];
         if (proj.owner !== playerId && Math.abs(proj.posx - player.x) < 20 && Math.abs(proj.posy - player.y) < 20) {
-          player.health -= 10; // Deal 10 damage
+          player.health -= 10;
           io.to(playerId).emit("playerHit", { damage: 10, health: player.health });
-          projectiles.splice(i, 1); // Remove projectile on hit
+          projectiles.splice(i, 1);
 
-          // Handle player death
           if (player.health <= 0) {
-            player.dead = true; // Mark as dead
-            player.deaths += 1; // Increment deaths
+            player.dead = true;
+            player.deaths += 1;
             if (players[proj.owner]) {
-              players[proj.owner].eliminations += 1; // Increment shooter’s eliminations
+              players[proj.owner].eliminations += 1;
             }
-            io.to(playerId).emit("playerDied"); // Notify client of death
+            io.to(playerId).emit("playerDied");
           }
         }
       }
     }
 
-    // Broadcast game state
     io.emit("gameUpdate", {
       players: players,
       projectiles: projectiles,
@@ -72,16 +68,13 @@ function startGameLoop() {
 io.on("connection", (socket) => {
   console.log("A player connected:", socket.id);
 
-  // Start game loop when first connection is made
   if (Object.keys(players).length === 0) {
     startGameLoop();
   }
 
-  // Request player name
   socket.emit("requestName");
   console.log("Sent requestName to:", socket.id);
 
-  // Fallback: Assign default name after 10 seconds
   const nameTimeout = setTimeout(() => {
     if (!players[socket.id]) {
       console.log(`No name received for ${socket.id}, assigning default`);
@@ -89,35 +82,31 @@ io.on("connection", (socket) => {
     }
   }, 10000);
 
-  // Handle player name
   socket.on("setPlayerName", (name) => {
-    clearTimeout(nameTimeout); // Cancel timeout
-    if (players[socket.id]) return; // Prevent duplicate player creation
+    clearTimeout(nameTimeout);
+    if (players[socket.id]) return;
 
-    // Initialize new player
     players[socket.id] = {
       x: Math.random() * 800,
       y: Math.random() * 600,
       health: 100,
-      color: `hsl(${Math.random() * 360}, 70%, 50%)`, // Random color
-      lastShot: 0, // Track last shot time
-      fireCD: 250, // Cooldown in milliseconds
+      color: `hsl(${Math.random() * 360}, 70%, 50%)`,
+      lastShot: 0,
+      fireCD: 250,
       name: typeof name === "string" && name.trim().length > 0 && name.length <= 20 ? name.trim() : `Guest_${Math.floor(Math.random() * 1000)}`,
-      eliminations: 0, // Track kills
-      deaths: 0, // Track deaths
-      dead: false, // Track dead/alive state
+      eliminations: 0,
+      deaths: 0,
+      dead: false,
     };
 
     console.log(`Player ${socket.id} set name to: ${players[socket.id].name}`);
 
-    // Send current game state to new player
     socket.emit("currentPlayers", players);
     socket.emit("currentProjectiles", projectiles);
-    // Broadcast new player to others
+
     socket.broadcast.emit("newPlayer", { id: socket.id, ...players[socket.id] });
   });
 
-  // Handle player movement
   socket.on("playerMovement", (movement) => {
     if (!players[socket.id] || players[socket.id].dead) return;
 
@@ -129,11 +118,9 @@ io.on("connection", (socket) => {
     if (movement.s) player.y += speed;
     if (movement.d) player.x += speed;
 
-    // Keep player within bounds
     player.x = Math.max(0, Math.min(800, player.x));
     player.y = Math.max(0, Math.min(600, player.y));
 
-    // Broadcast updated position
     io.emit("playerMoved", { id: socket.id, x: player.x, y: player.y });
   });
 
@@ -143,9 +130,8 @@ io.on("connection", (socket) => {
     const player = players[socket.id];
     const currentTime = Date.now();
 
-    // Check cooldown
     if (currentTime - player.lastShot < player.fireCD) {
-      return; // Ignore shot if cooldown hasn't elapsed
+      return;
     }
 
     let dirx = 0;
@@ -156,42 +142,37 @@ io.on("connection", (socket) => {
     if (shoot.left) dirx--;
     if (shoot.right) dirx++;
 
-    // Only create projectile if direction is set
     if (dirx !== 0 || diry !== 0) {
-      // Normalize direction
       const length = Math.sqrt(dirx * dirx + diry * diry);
       dirx /= length;
       diry /= length;
       const projectile = new Projectile(player.x, player.y, dirx, diry, socket.id);
       projectiles.push(projectile);
-      player.lastShot = currentTime; // Update last shot time
+      player.lastShot = currentTime;
     }
   });
 
-  // Handle player respawn
   socket.on("playerRespawn", () => {
     if (!players[socket.id] || !players[socket.id].dead) return;
     const player = players[socket.id];
-    player.health = 100; // Reset health
-    player.x = Math.random() * 800; // Random position
+    player.health = 100;
+    player.x = Math.random() * 800;
     player.y = Math.random() * 600;
-    player.dead = false; // Mark as alive
+    player.dead = false;
     io.to(socket.id).emit("respawnConfirmed", { x: player.x, y: player.y, health: player.health });
-    io.emit("playerMoved", { id: socket.id, x: player.x, y: player.y }); // Update position for all clients
+    io.emit("playerMoved", { id: socket.id, x: player.x, y: player.y });
   });
 
-  // Handle disconnection
   socket.on("disconnect", () => {
     console.log("Player disconnected:", socket.id);
     clearTimeout(nameTimeout);
     delete players[socket.id];
     io.emit("playerDisconnected", socket.id);
 
-    // Stop game loop if no players left
     if (Object.keys(players).length === 0) {
       clearInterval(gameInterval);
       gameInterval = null;
-      projectiles.length = 0; // Clear all projectiles
+      projectiles.length = 0;
     }
   });
 });
