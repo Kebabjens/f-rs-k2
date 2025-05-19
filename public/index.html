@@ -91,16 +91,29 @@
       let shoot = { up: false, left: false, down: false, right: false };
       let isNamed = false;
 
+      // Show name input overlay immediately
       document.getElementById("nameInputOverlay").style.display = "block";
       document.getElementById("nameInput").focus();
       console.log("Name input overlay displayed");
 
+      // Socket error handling
+      socket.on("connect_error", (error) => {
+        console.error("Socket connection error:", error);
+        alert("Failed to connect to the server. Please check if the server is running.");
+      });
+
+      socket.on("connect", () => {
+        console.log("Connected to server, socket.id:", socket.id);
+      });
+
+      // Show name input overlay
       socket.on("requestName", () => {
-        console.log("Received requestName from server");
+        console.log("Received requestName");
         document.getElementById("nameInputOverlay").style.display = "block";
         document.getElementById("nameInput").focus();
       });
 
+      // Handle name submission
       function submitName() {
         const nameInput = document.getElementById("nameInput").value.trim();
         const nameError = document.getElementById("nameError");
@@ -119,6 +132,7 @@
         console.log("isNamed set to true");
       }
 
+      // Submit name on Enter key
       document.getElementById("nameInput").addEventListener("keypress", (e) => {
         if (e.key === "Enter") {
           console.log("Enter key pressed for name submission");
@@ -126,6 +140,7 @@
         }
       });
 
+      // Handle keyboard input
       document.addEventListener("keydown", (e) => {
         if (!isNamed) return;
         if (e.key === "w") movement.w = true;
@@ -152,6 +167,7 @@
         if (e.key === "ArrowRight") shoot.right = false;
       });
 
+      // Send movement and shooting to server
       setInterval(() => {
         if (!isNamed) return;
         if (movement.w || movement.a || movement.s || movement.d) {
@@ -162,8 +178,9 @@
         }
       }, 1000 / 60);
 
+      // Receive current players
       socket.on("currentPlayers", (serverPlayers) => {
-        console.log("Received currentPlayers:", serverPlayers);
+        console.log("Received currentPlayers:", Object.keys(serverPlayers));
         Object.assign(players, serverPlayers);
         if (serverPlayers[socket.id]) {
           isNamed = true;
@@ -171,11 +188,13 @@
         }
       });
 
+      // Receive new player
       socket.on("newPlayer", (player) => {
-        console.log("Received newPlayer:", player);
+        console.log("Received newPlayer:", player.id);
         players[player.id] = player;
       });
 
+      // Update player position
       socket.on("playerMoved", (data) => {
         if (players[data.id]) {
           players[data.id].x = data.x;
@@ -183,18 +202,24 @@
         }
       });
 
+      // Remove disconnected player
       socket.on("playerDisconnected", (id) => {
         console.log("Player disconnected:", id);
         delete players[id];
       });
 
-      socket.on("playerHit", (data) => {});
+      // Handle player hit
+      socket.on("playerHit", (data) => {
+        console.log("Player hit:", data);
+      });
 
+      // Handle player death
       socket.on("playerDied", () => {
         console.log("Received playerDied");
         document.getElementById("respawnMessage").style.display = "block";
       });
 
+      // Handle respawn confirmation
       socket.on("respawnConfirmed", (data) => {
         console.log("Received respawnConfirmed:", data);
         players[socket.id].x = data.x;
@@ -203,13 +228,15 @@
         players[socket.id].dead = false;
       });
 
+      // Receive game state updates
       socket.on("gameUpdate", (data) => {
-        console.log("Received gameUpdate:", Object.keys(data.players).length, "players");
+        console.log("Received gameUpdate, players:", Object.keys(data.players).length);
         Object.assign(players, data.players);
         projectiles.length = 0;
         projectiles.push(...data.projectiles);
       });
 
+      // Draw scoreboard
       function drawScoreboard() {
         ctx.fillStyle = "white";
         ctx.fillRect(820, 10, 170, 580);
@@ -237,6 +264,7 @@
         }
       }
 
+      // Game loop
       function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -249,15 +277,14 @@
           return;
         }
 
+        // Draw all players
         for (const id in players) {
           const player = players[id];
           if (player.dead) continue;
           ctx.fillStyle = player.color || "blue";
-          ctx.lineWidth = 2;
           ctx.beginPath();
           ctx.arc(player.x, player.y, 20, 0, Math.PI * 2);
           ctx.fill();
-          ctx.stroke();
 
           const barWidth = 40;
           const barHeight = 5;
@@ -277,6 +304,7 @@
           ctx.fillText(player.name, player.x, player.y - 30);
         }
 
+        // Draw all projectiles
         projectiles.forEach((proj) => {
           if (projImage.complete && projImage.naturalWidth !== 0) {
             const imgWidth = 20;

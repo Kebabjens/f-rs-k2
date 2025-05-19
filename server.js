@@ -69,6 +69,7 @@ io.on("connection", (socket) => {
   console.log("A player connected:", socket.id);
 
   if (Object.keys(players).length === 0) {
+    console.log("Starting game loop");
     startGameLoop();
   }
 
@@ -78,12 +79,13 @@ io.on("connection", (socket) => {
   const nameTimeout = setTimeout(() => {
     if (!players[socket.id]) {
       console.log(`No name received for ${socket.id}, assigning default`);
-      socket.emit("setPlayerName", `Guest_${Math.floor(Math.random() * 1000)}`);
+      // Simulate setPlayerName call
+      const defaultName = `Guest_${Math.floor(Math.random() * 1000)}`;
+      handleSetPlayerName(socket, defaultName);
     }
   }, 10000);
 
-  socket.on("setPlayerName", (name) => {
-    clearTimeout(nameTimeout);
+  function handleSetPlayerName(socket, name) {
     if (players[socket.id]) return;
 
     players[socket.id] = {
@@ -103,8 +105,13 @@ io.on("connection", (socket) => {
 
     socket.emit("currentPlayers", players);
     socket.emit("currentProjectiles", projectiles);
-
     socket.broadcast.emit("newPlayer", { id: socket.id, ...players[socket.id] });
+  }
+
+  socket.on("setPlayerName", (name) => {
+    console.log("Received setPlayerName:", name);
+    clearTimeout(nameTimeout);
+    handleSetPlayerName(socket, name);
   });
 
   socket.on("playerMovement", (movement) => {
@@ -170,6 +177,7 @@ io.on("connection", (socket) => {
     io.emit("playerDisconnected", socket.id);
 
     if (Object.keys(players).length === 0) {
+      console.log("No players left, stopping game loop");
       clearInterval(gameInterval);
       gameInterval = null;
       projectiles.length = 0;
